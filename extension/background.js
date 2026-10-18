@@ -1,34 +1,35 @@
 importScripts('core.js');
 const C = PrimeRpc, HOST = 'com.lain.prime_video_rpc';
-let preferences = C.settings(), port = null, status = { state: 'starting', message: 'Starting…', published: false };
+let preferences = C.settings(), port = null, status = { state: 'starting', message: 'Starting…', published: false, artworkOmitted: false };
 let activeId = null, reconnectAfter = 0;
 const sessions = new Map();
 const ready = chrome.storage.local.get('settings').then(value => { preferences = C.settings(value.settings); });
 
 function connection() {
   if (port || Date.now() < reconnectAfter) return;
-  status = { state: 'connecting', message: 'Connecting to the helper…', published: false };
+  status = { state: 'connecting', message: 'Connecting to the helper…', published: false, artworkOmitted: false };
   try {
     const connected = chrome.runtime.connectNative(HOST);
     port = connected;
     connected.onMessage.addListener(message => {
       if (port !== connected || message?.type !== 'status') return;
-      status = { state: C.text(message.state, 32), message: C.text(message.message, 220), published: message.published === true };
+      status = { state: C.text(message.state, 32), message: C.text(message.message, 220), published: message.published === true,
+        artworkOmitted: message.state === 'connected' && message.published === true && message.artworkOmitted === true };
     });
     connected.onDisconnect.addListener(() => {
       const error = chrome.runtime.lastError?.message || 'Helper disconnected.';
       if (port !== connected) return;
       port = null; reconnectAfter = Date.now() + 15000;
-      status = { state: 'helper-missing', message: error, published: false };
+      status = { state: 'helper-missing', message: error, published: false, artworkOmitted: false };
     });
   } catch (error) {
     port = null; reconnectAfter = Date.now() + 15000;
-    status = { state: 'helper-missing', message: C.text(error.message), published: false };
+    status = { state: 'helper-missing', message: C.text(error.message), published: false, artworkOmitted: false };
   }
 }
 function disconnect(state, message) {
   if (port) { const old = port; port = null; old.disconnect(); }
-  status = { state, message, published: false };
+  status = { state, message, published: false, artworkOmitted: false };
 }
 function publish() {
   if (!preferences.enabled) { disconnect('disabled', 'Sharing is switched off.'); return; }

@@ -9,8 +9,8 @@ using PrimeVideoRpc;
 internal class HelperTests {
     static int checks;
     static void Check(bool ok,string label) { if(!ok) throw new Exception(label); checks++; Console.WriteLine("PASS " + label); }
-    static Dictionary<string,object> ReadRpc(Stream stream,out int opcode) {
-        var header=Protocol.ReadExact(stream,8,3000); opcode=BitConverter.ToInt32(header,0);
+    static Dictionary<string,object> ReadRpc(Stream stream,out int opcode,int timeout=3000) {
+        var header=Protocol.ReadExact(stream,8,timeout); opcode=BitConverter.ToInt32(header,0);
         return Json.Decode(Encoding.UTF8.GetString(Protocol.ReadBody(stream,header,4,3000)));
     }
     static void Write(Stream stream,int opcode,object value) { Protocol.WriteRpc(stream,opcode,Encoding.UTF8.GetBytes(Json.Encode(value))); }
@@ -81,6 +81,74 @@ internal class HelperTests {
             Check(failed,"a broken connection is not treated as an artwork rejection");
         });
     }
+    static Dictionary<string,object> ReadStatus(Stream stream,string state) {
+        for(int i=0;i<5;i++) {
+            var header=Protocol.ReadExact(stream,4,10000);
+            var status=Json.Decode(Encoding.UTF8.GetString(Protocol.ReadBody(stream,header,0,3000)));
+            if(Json.Text(status,"type")!="status") throw new Exception("Expected native status message.");
+            if(Json.Text(status,"state")==state) return status;
+        }
+        throw new Exception("Expected status: "+state);
+    }
+    static void BridgeStatusTests() {
+        string discordName="prime-rpc-test-"+Guid.NewGuid().ToString("N");
+        string nativeName="prime-rpc-test-"+Guid.NewGuid().ToString("N");
+        Exception discordError=null,bridgeError=null;
+        using(var discord=new NamedPipeServerStream(discordName,PipeDirection.InOut,1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous))
+        using(var native=new NamedPipeServerStream(nativeName,PipeDirection.InOut,1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous)) {
+            var discordThread=new Thread(()=>{
+                try {
+                    discord.WaitForConnection(); int opcode;
+                    ReadRpc(discord,out opcode);
+                    Write(discord,1,new {cmd="DISPATCH",evt="READY",data=new {v=1}});
+                    for(int i=0;i<6;i++) {
+                        var request=ReadRpc(discord,out opcode,10000);
+                        var incoming=Json.Get(Json.Get(request,"args") as Dictionary<string,object>,"activity") as Dictionary<string,object>;
+                        if(i>=4 && incoming!=null) throw new Exception("Expected activity clear.");
+                        if(i<4 && (incoming==null || (Json.Get(incoming,"assets")!=null)!=(i==0||i==2)))
+                            throw new Exception("Unexpected artwork in bridge request.");
+                        if(i==0) Write(discord,1,new {cmd="SET_ACTIVITY",evt="ERROR",nonce=Json.Text(request,"nonce"),data=new {message="Invalid image"}});
+                        else Write(discord,1,new {cmd="SET_ACTIVITY",nonce=Json.Text(request,"nonce"),data=new {}});
+                    }
+                } catch(Exception error) { discordError=error; }
+            }) {IsBackground=true};
+            var bridgeThread=new Thread(()=>{
+                try {
+                    native.WaitForConnection();
+                    new Bridge(native,()=>{
+                        var pipe=new NamedPipeClientStream(".",discordName,PipeDirection.InOut,PipeOptions.Asynchronous);
+                        pipe.Connect(2000); return new DiscordClient(pipe,1234);
+                    }).Run(native);
+                } catch(Exception error) { bridgeError=error; }
+            }) {IsBackground=true};
+            discordThread.Start(); bridgeThread.Start();
+            using(var browser=new NamedPipeClientStream(".",nativeName,PipeDirection.InOut,PipeOptions.Asynchronous)) {
+                browser.Connect(2000);
+                var status=ReadStatus(browser,"connecting");
+                Check(Object.Equals(Json.Get(status,"artworkOmitted"),false),"native connecting status has no artwork warning");
+                var rejected=Json.Decode("{\"details\":\"Example\",\"assets\":{\"large_image\":\"https://m.media-amazon.com/images/rejected.jpg\"}}");
+                var accepted=Json.Decode("{\"details\":\"Example\",\"assets\":{\"large_image\":\"https://m.media-amazon.com/images/accepted.jpg\"}}");
+                Protocol.WriteNative(browser,new {type="update",clientId="123456789012345678",activity=rejected});
+                status=ReadStatus(browser,"connected");
+                Check(Object.Equals(Json.Get(status,"published"),true) && Object.Equals(Json.Get(status,"artworkOmitted"),true),"native status reports acknowledged artwork fallback");
+                Protocol.WriteNative(browser,new {type="update",clientId="123456789012345678",activity=accepted});
+                status=ReadStatus(browser,"connected");
+                Check(Object.Equals(Json.Get(status,"artworkOmitted"),false),"successful artwork clears the native warning");
+                Protocol.WriteNative(browser,new {type="update",clientId="123456789012345678",activity=rejected});
+                status=ReadStatus(browser,"connected");
+                Check(Object.Equals(Json.Get(status,"artworkOmitted"),true),"cached artwork rejection remains explicit in native status");
+                Protocol.WriteNative(browser,new {type="update",clientId="123456789012345678",activity=(object)null});
+                status=ReadStatus(browser,"connected");
+                Check(Object.Equals(Json.Get(status,"published"),false) && Object.Equals(Json.Get(status,"artworkOmitted"),false),"clearing presence clears the native artwork warning");
+                Protocol.WriteNative(browser,new {type="invalid"});
+                status=ReadStatus(browser,"error");
+                Check(Object.Equals(Json.Get(status,"artworkOmitted"),false),"native errors do not retain an artwork warning");
+            }
+            if(!bridgeThread.Join(5000) || !discordThread.Join(5000)) throw new Exception("Bridge status test did not finish.");
+            if(bridgeError!=null) throw bridgeError;
+            if(discordError!=null) throw discordError;
+        }
+    }
     static int Main() {
         try {
             using(var memory=new MemoryStream()) {
@@ -131,6 +199,7 @@ internal class HelperTests {
                 Check(true,"named-pipe handshake, SET_ACTIVITY, ping/pong, and clear");
             }
             ArtworkTests();
+            BridgeStatusTests();
             Console.WriteLine(checks+" helper checks passed."); return 0;
         } catch(Exception error) { Console.Error.WriteLine(error); return 1; }
     }

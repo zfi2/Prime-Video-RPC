@@ -101,6 +101,8 @@ input:focus-visible + .switch { outline: 2px solid var(--accent); outline-offset
 }
 .cover img { width: 100%; height: 100%; object-fit: cover; }
 .cover.off { background: transparent; border: 1px dashed var(--line-strong); }
+.cover.rejected { border-color: var(--warn); color: var(--warn); }
+#cover-rejected { padding: 4px; font-size: 11px; line-height: 1.3; text-align: center; }
 .activity-text { flex: 1; min-width: 0; }
 .title { display: block; width: fit-content; max-width: 100%; font-size: 15px; font-weight: 650; line-height: 1.3; overflow-wrap: anywhere; }
 .title.off { font-size: 12px; font-weight: 500; color: var(--muted); border: 1px dashed var(--line-strong); border-radius: 6px; padding: 1px 8px; }

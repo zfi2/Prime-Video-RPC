@@ -8,7 +8,7 @@ const descriptions = {
   'discord-missing':['Waiting for Discord','Open the Discord desktop app.'], disabled:['Sharing is off','Your activity is hidden.'],
   'needs-id':['Application ID needed','Add your ID in Connection & setup.'], error:['Connection needs attention','Try reconnecting, or check Connection & setup.']
 };
-// Healthy and switched-off states are fully described by the status line; the notice is only for problems.
+// Routine connected and switched-off states need no notice; artwork fallback is an exception.
 const quietStates = ['connected', 'disabled'];
 const setupStates = ['needs-id', 'helper-missing'];
 const setText = (id, value) => { const element = $(id); if (element.textContent !== value) element.textContent = value; };
@@ -23,9 +23,12 @@ function render(data, syncInputs = false) {
   const {settings, status, activity, playback} = data;
   if (syncInputs) { for (const key of toggles) $(key).checked = settings[key]; $('clientId').value = settings.clientId; }
 
+  const artworkOmitted = status.state === 'connected' && status.published === true &&
+    status.artworkOmitted === true && !!activity?.assets?.large_image;
   const [title, description] = descriptions[status.state] || descriptions.error;
-  const detail = ['connected','error','helper-missing'].includes(status.state) ? status.message || description : description;
-  const showDetail = !quietStates.includes(status.state);
+  const detail = artworkOmitted ? 'Presence shared without artwork. Discord rejected this image.' :
+    ['connected','error','helper-missing'].includes(status.state) ? status.message || description : description;
+  const showDetail = artworkOmitted || !quietStates.includes(status.state);
   setText('connection-title', title);
   setText('connection-detail', showDetail ? detail : ''); $('connection-detail').hidden = !showDetail;
   $('status-dot').className = `dot ${status.state}`;
@@ -36,7 +39,7 @@ function render(data, syncInputs = false) {
   // A field is "hidden" when something is being shared but this detail is switched off.
   const hidden = key => !!activity && !settings[key];
   const live = !!activity && !!status.published;
-  setText('preview-label', live ? 'On Discord' : 'Preview');
+  setText('preview-label', live ? artworkOmitted ? 'On Discord · no artwork' : 'On Discord' : 'Preview');
   $('preview-label').classList.toggle('live', live);
   $('preview').classList.toggle('interactive', !!activity);
 
@@ -50,13 +53,15 @@ function render(data, syncInputs = false) {
     !settings.enabled ? 'Turn on sharing to show your activity.' :
     hiddenWhilePaused ? 'Resume playback to show it again.' : 'Open a movie or episode to get started.');
 
-  const image = activity?.assets?.large_image, showImage = !!image && image !== failedImage, artworkOff = hidden('showArtwork');
+  const image = activity?.assets?.large_image, showImage = !!image && image !== failedImage && !artworkOmitted, artworkOff = hidden('showArtwork');
   if (showImage && $('artwork').getAttribute('src') !== image) { $('artwork').src = image; $('backdrop').src = image; }
   if (!showImage) { $('artwork').removeAttribute('src'); $('backdrop').removeAttribute('src'); }
   $('artwork').hidden = !showImage; $('backdrop').hidden = !showImage;
-  $('cover-placeholder').hidden = showImage || artworkOff;
+  $('cover-placeholder').hidden = showImage || artworkOff || artworkOmitted;
   $('cover-off').hidden = !artworkOff;
-  $('cover').classList.toggle('off', artworkOff);
+  $('cover-rejected').hidden = !artworkOmitted;
+  $('cover').classList.toggle('off', artworkOff || artworkOmitted);
+  $('cover').classList.toggle('rejected', artworkOmitted);
 
   const timerOff = hidden('showTimer'), hasTime = !!activity?.timestamps;
   $('timer-row').hidden = !(timerOff || hasTime);
@@ -94,6 +99,11 @@ $('reconnect').addEventListener('click', () => {
 });
 $('reconnect').addEventListener('animationend', () => $('reconnect').classList.remove('spin'));
 $('setup').addEventListener('toggle', () => { setupSeen = true; });
-$('artwork').addEventListener('error', () => { failedImage = $('artwork').getAttribute('src') || ''; $('artwork').hidden = true; $('backdrop').hidden = true; $('cover-placeholder').hidden = false; });
+$('artwork').addEventListener('error', () => {
+  const image = $('artwork').getAttribute('src');
+  if (!image) return;
+  failedImage = image;
+  if (current) render(current);
+});
 request({type:'status'},true).catch(error => feedback(error.message,true));
 setInterval(() => { if (!busy) request({type:'status'}).catch(() => {}); },1500);

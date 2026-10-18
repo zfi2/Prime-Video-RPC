@@ -6,15 +6,17 @@ using System.Collections.Generic;
 namespace PrimeVideoRpc {
     internal sealed class Bridge {
         readonly Stream output;
+        readonly Func<DiscordClient> connect;
         readonly object gate = new object(), outputGate = new object();
         readonly AutoResetEvent changed = new AutoResetEvent(false);
         volatile bool running = true;
         string clientId = "", lastStatus = "";
         Dictionary<string,object> activity;
         DateTime received = DateTime.MinValue;
-        public Bridge(Stream output) { this.output = output; }
-        void Status(string state, string message, bool published) {
-            var value = new {type="status",state=state,message=message,published=published};
+        public Bridge(Stream output) : this(output, DiscordClient.Connect) { }
+        internal Bridge(Stream output, Func<DiscordClient> connect) { this.output = output; this.connect = connect; }
+        void Status(string state, string message, bool published, bool artworkOmitted = false) {
+            var value = new {type="status",state=state,message=message,published=published,artworkOmitted=artworkOmitted};
             string serialized = Json.Encode(value);
             lock(outputGate) {
                 if (serialized == lastStatus) return;
@@ -39,7 +41,7 @@ namespace PrimeVideoRpc {
                     try {
                         if (discord == null) {
                             Status("connecting","Connecting to Discord…",false);
-                            discord = DiscordClient.Connect();
+                            discord = connect();
                             discord.Handshake(id); connectedId = id; sent = ""; lastSent = DateTime.MinValue;
                         }
                         string serialized = Json.Encode(desired);
@@ -49,7 +51,7 @@ namespace PrimeVideoRpc {
                             bool artworkOmitted = discord.SetActivity(desired);
                             sent = serialized; lastSent = DateTime.UtcNow;
                             Status("connected",desired == null ? "Ready. No activity is being shared." :
-                                artworkOmitted ? "Presence shared without artwork. Discord rejected this image." : "Presence updated in Discord.",desired != null);
+                                artworkOmitted ? "Presence shared without artwork. Discord rejected this image." : "Presence updated in Discord.",desired != null,artworkOmitted);
                         }
                     } catch (Exception error) {
                         if (discord != null) { discord.Dispose(); discord = null; }
