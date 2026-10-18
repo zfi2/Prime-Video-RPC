@@ -46,13 +46,15 @@ namespace PrimeVideoRpc {
                         // Clears bypass throttling. Other changes coalesce, while a heartbeat checks the pipe.
                         double elapsed = (DateTime.UtcNow-lastSent).TotalSeconds;
                         if ((serialized != sent && (desired == null || elapsed >= 5)) || elapsed >= 15) {
-                            discord.SetActivity(desired); sent = serialized; lastSent = DateTime.UtcNow;
-                            Status("connected",desired == null ? "Ready. No activity is being shared." : "Presence updated in Discord.",desired != null);
+                            bool artworkOmitted = discord.SetActivity(desired);
+                            sent = serialized; lastSent = DateTime.UtcNow;
+                            Status("connected",desired == null ? "Ready. No activity is being shared." :
+                                artworkOmitted ? "Presence shared without artwork. Discord rejected this image." : "Presence updated in Discord.",desired != null);
                         }
                     } catch (Exception error) {
                         if (discord != null) { discord.Dispose(); discord = null; }
                         sent = ""; retryAt = DateTime.UtcNow.AddSeconds(10);
-                        Status(error is InvalidDataException ? "error" : "discord-missing",error.Message,false);
+                        Status(error is InvalidDataException || error is DiscordCommandException ? "error" : "discord-missing",error.Message,false);
                     }
                 }
             } finally {

@@ -11,6 +11,7 @@ $testExe = Join-Path $projectRoot 'dist\HelperTests.exe'
 if ($LASTEXITCODE -ne 0) { throw 'Helper test build failed.' }
 & $testExe
 if ($LASTEXITCODE -ne 0) { throw 'Helper tests failed.' }
+& (Join-Path $projectRoot 'tests\Install.Tests.ps1')
 $testFiles = @(Get-ChildItem -LiteralPath (Join-Path $projectRoot 'tests') -Filter '*.test.cjs' | ForEach-Object FullName)
 & node --test $testFiles
 if ($LASTEXITCODE -ne 0) { throw 'Extension tests failed.' }

@@ -5,9 +5,13 @@ using System.Text;
 using System.Collections.Generic;
 
 namespace PrimeVideoRpc {
+    internal sealed class DiscordCommandException : IOException {
+        public DiscordCommandException(string message) : base("Discord: " + message) { }
+    }
     internal sealed class DiscordClient : IDisposable {
         readonly Stream pipe;
         readonly int processId;
+        string rejectedArtwork = "";
         public DiscordClient(Stream pipe, int processId) { this.pipe = pipe; this.processId = processId; }
         public static DiscordClient Connect() {
             for (int i = 0; i < 10; i++) {
@@ -29,9 +33,10 @@ namespace PrimeVideoRpc {
                 if (opcode == 2) throw new IOException("Discord closed the connection. Check the Application ID.");
                 if (opcode != 1) continue;
                 var message = Json.Decode(new UTF8Encoding(false,true).GetString(body));
+                if (expectedNonce != null && Json.Text(message,"nonce") != expectedNonce) continue;
                 if (Json.Text(message,"evt") == "ERROR") {
                     var data = Json.Get(message,"data") as Dictionary<string,object>;
-                    throw new InvalidDataException("Discord: " + Json.Text(data,"message"));
+                    throw new DiscordCommandException(Json.Text(data,"message"));
                 }
                 if (expectedNonce == null && Json.Text(message,"evt") == "READY") return message;
                 if (expectedNonce != null && Json.Text(message,"nonce") == expectedNonce) return message;
@@ -42,10 +47,26 @@ namespace PrimeVideoRpc {
             Protocol.WriteRpc(pipe,0,Encoding.UTF8.GetBytes(Json.Encode(new {v=1,client_id=id})));
             Receive(null);
         }
-        public void SetActivity(Dictionary<string,object> activity) {
+        void SendActivity(Dictionary<string,object> activity) {
             string nonce = Guid.NewGuid().ToString();
             Protocol.WriteRpc(pipe,1,Encoding.UTF8.GetBytes(Json.Encode(new {cmd="SET_ACTIVITY", args=new {pid=processId,activity=activity},nonce=nonce})));
             Receive(nonce);
+        }
+        // True means Discord accepted the presence with artwork omitted.
+        public bool SetActivity(Dictionary<string,object> activity) {
+            var assets = Json.Get(activity,"assets") as Dictionary<string,object>;
+            string image = Json.Text(assets,"large_image");
+            if (image.Length == 0) { SendActivity(activity); return false; }
+            var withoutArtwork = new Dictionary<string,object>(activity);
+            withoutArtwork.Remove("assets");
+            if (image == rejectedArtwork) { SendActivity(withoutArtwork); return true; }
+            try { SendActivity(activity); return false; }
+            catch (DiscordCommandException) {
+                // Only an explicit command rejection gets a fallback. Transport errors still reconnect.
+                SendActivity(withoutArtwork);
+                rejectedArtwork = image;
+                return true;
+            }
         }
         public void Dispose() { pipe.Dispose(); }
     }

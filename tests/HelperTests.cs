@@ -14,6 +14,73 @@ internal class HelperTests {
         return Json.Decode(Encoding.UTF8.GetString(Protocol.ReadBody(stream,header,4,3000)));
     }
     static void Write(Stream stream,int opcode,object value) { Protocol.WriteRpc(stream,opcode,Encoding.UTF8.GetBytes(Json.Encode(value))); }
+    static void WithDiscord(Action<Stream> serve,Action<DiscordClient> useClient) {
+        string name="prime-rpc-test-"+Guid.NewGuid().ToString("N");
+        Exception serverError=null;
+        using(var server=new NamedPipeServerStream(name,PipeDirection.InOut,1,PipeTransmissionMode.Byte,PipeOptions.Asynchronous)) {
+            var thread=new Thread(()=>{
+                try {
+                    server.WaitForConnection(); int opcode;
+                    ReadRpc(server,out opcode);
+                    Write(server,1,new {cmd="DISPATCH",evt="READY",data=new {v=1}});
+                    serve(server);
+                } catch(Exception error) { serverError=error; }
+            }) {IsBackground=true};
+            thread.Start();
+            using(var pipe=new NamedPipeClientStream(".",name,PipeDirection.InOut,PipeOptions.Asynchronous)) {
+                pipe.Connect(2000);
+                using(var client=new DiscordClient(pipe,1234)) {
+                    client.Handshake("123456789012345678"); useClient(client);
+                }
+            }
+            if(!thread.Join(5000)) throw new Exception("Mock Discord did not finish.");
+            if(serverError!=null) throw serverError;
+        }
+    }
+    static void ArtworkTests() {
+        var activity=Activity.Sanitize(Json.Decode("{\"details\":\"Example\",\"state\":\"S1 E2\",\"assets\":{\"large_image\":\"https://m.media-amazon.com/images/rejected.jpg\"}}"));
+        WithDiscord(server=>{
+            for(int i=0;i<5;i++) {
+                int opcode; var request=ReadRpc(server,out opcode);
+                var args=Json.Get(request,"args") as Dictionary<string,object>;
+                var incoming=Json.Get(args,"activity") as Dictionary<string,object>;
+                if(i==4) { if(incoming!=null) throw new Exception("Clear was not sent."); }
+                else {
+                    bool hasArtwork=Json.Get(incoming,"assets")!=null;
+                    if(hasArtwork!=(i==0||i==3)) throw new Exception("Wrong artwork retry behavior.");
+                    if(Json.Text(incoming,"details")!="Example" || Json.Text(incoming,"state")!="S1 E2") throw new Exception("Fallback lost metadata.");
+                }
+                if(i==0) Write(server,1,new {cmd="SET_ACTIVITY",evt="ERROR",nonce=Json.Text(request,"nonce"),data=new {message="Invalid image"}});
+                else {
+                    if(i==1) Write(server,1,new {cmd="SET_ACTIVITY",evt="ERROR",nonce="unrelated",data=new {message="Unrelated failure"}});
+                    Write(server,1,new {cmd="SET_ACTIVITY",nonce=Json.Text(request,"nonce"),data=new {}});
+                }
+            }
+        },client=>{
+            Check(client.SetActivity(activity),"rejected artwork retries as text presence on the same connection");
+            Check(client.SetActivity(activity),"heartbeat skips artwork already rejected by Discord");
+            Check(activity.ContainsKey("assets"),"fallback leaves the original activity intact");
+            var next=new Dictionary<string,object>(activity);
+            next["assets"]=new Dictionary<string,object>{{"large_image","https://m.media-amazon.com/images/new.jpg"}};
+            Check(!client.SetActivity(next),"a new image is attempted normally");
+            Check(!client.SetActivity(null),"clearing still works after artwork fallback");
+        });
+        WithDiscord(server=>{
+            for(int i=0;i<2;i++) {
+                int opcode; var request=ReadRpc(server,out opcode);
+                Write(server,1,new {cmd="SET_ACTIVITY",evt="ERROR",nonce=Json.Text(request,"nonce"),data=new {message="Invalid activity"}});
+            }
+        },client=>{
+            bool failed=false;
+            try { client.SetActivity(activity); } catch(DiscordCommandException) { failed=true; }
+            Check(failed,"a rejected text fallback is reported as an error");
+        });
+        WithDiscord(server=>{ int opcode; ReadRpc(server,out opcode); server.Dispose(); },client=>{
+            bool failed=false;
+            try { client.SetActivity(activity); } catch(EndOfStreamException) { failed=true; }
+            Check(failed,"a broken connection is not treated as an artwork rejection");
+        });
+    }
     static int Main() {
         try {
             using(var memory=new MemoryStream()) {
@@ -63,6 +130,7 @@ internal class HelperTests {
                 if(serverError!=null) throw serverError;
                 Check(true,"named-pipe handshake, SET_ACTIVITY, ping/pong, and clear");
             }
+            ArtworkTests();
             Console.WriteLine(checks+" helper checks passed."); return 0;
         } catch(Exception error) { Console.Error.WriteLine(error); return 1; }
     }

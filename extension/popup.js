@@ -16,7 +16,7 @@ function render(data, syncInputs = false) {
   if (syncInputs) { for (const key of toggles) $(key).checked = settings[key]; $('clientId').value = settings.clientId; }
   const [title, description] = descriptions[status.state] || descriptions.error;
   $('connection-title').textContent = title;
-  $('connection-detail').textContent = ['error','helper-missing'].includes(status.state) ? status.message || description : description;
+  $('connection-detail').textContent = ['connected','error','helper-missing'].includes(status.state) ? status.message || description : description;
   $('status-dot').className = `dot ${status.state}`;
   $('extension-id').textContent = data.extensionId;
   $('preview-label').textContent = activity && status.published ? 'SHARING' : 'PREVIEW';
