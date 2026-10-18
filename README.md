@@ -2,7 +2,9 @@
 
 Show what you’re watching on Prime Video in your Discord profile, with the title, episode, artwork, playback timer, and paused status.
 
-![Prime Video presence in Discord](docs/images/discord-presence.png)
+| Playing | Paused |
+| --- | --- |
+| ![Prime Video presence during playback](screenshots/playing.png) | ![Prime Video presence while paused](screenshots/paused.png) |
 
 Works with **Google Chrome and Discord desktop on Windows 10/11**, using **primevideo.com in English**.
 
