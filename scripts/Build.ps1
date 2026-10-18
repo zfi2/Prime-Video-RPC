@@ -20,7 +20,7 @@ foreach ($size in @(16,48,128)) {
     $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
     $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $graphics.Clear([System.Drawing.Color]::FromArgb(19,35,47))
-    $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(109,228,201))
+    $brush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(31,160,255))
     # A centroid-centered triangle looks right-heavy. Shift it left for optical balance.
     $points = [System.Drawing.PointF[]]@(
         [System.Drawing.PointF]::new($size*0.33,$size*0.25),
