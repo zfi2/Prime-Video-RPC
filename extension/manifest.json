@@ -1,0 +1,42 @@
+{
+  "manifest_version": 3,
+  "name": "Prime Video · Discord Presence",
+  "version": "1.0.0",
+  "description": "Share what you’re watching on Prime Video with Discord. You choose the details.",
+  "minimum_chrome_version": "120",
+  "permissions": [
+    "storage",
+    "nativeMessaging",
+    "alarms"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Prime Video presence"
+  },
+  "icons": {
+    "16": "icons/16.png",
+    "48": "icons/48.png",
+    "128": "icons/128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://primevideo.com/*",
+        "https://www.primevideo.com/*"
+      ],
+      "js": [
+        "core.js",
+        "detector.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'none'; connect-src 'none'; img-src 'self' https://*.media-amazon.com https://*.ssl-images-amazon.com https://*.images-amazon.com; style-src 'self'"
+  },
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAjlClmOKgCjb5bxois/shK4FCfKOIIlt4qofqkDCUDkeKyugpNrD5j4bG/kiAOAeHrApHyCzTI5P727vt9IPf+HH/Rdn1JBDwkTTWHuwUMae0wK/7WDORR7/WidIJMKLkMWwqAmCbvc8ysBbAn/zhpzc7Ewj5zRWgEEeT3Vuxim9ol95wRCYWzo/uK3c7NMZizdibV9bjpnVHxFQ6uc9ud7y5cDBH0zU04h63yTz9hKs+BfjLJBbHtTSXNno87J3seBhxWVgadLsVL+NjtXYyJqMHcLgr8EjOa6L3AsFIHoAIs1kkbmHyeUgHXFAfXrM00gS0/5hQcb3UfycAtZsfXQIDAQAB"
+}

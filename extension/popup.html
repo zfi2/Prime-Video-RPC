@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Prime Presence</title><link rel="stylesheet" href="popup.css">
+  <script src="core.js" defer></script><script src="popup.js" defer></script>
+</head>
+<body>
+  <header><div class="brand"><img src="icons/48.png" width="36" height="36" alt=""><div><h1>Prime Presence</h1><p>A little of what you’re watching.</p></div></div><span class="tag">DISCORD</span></header>
+  <main>
+    <section class="connection" aria-live="polite"><span class="dot" id="status-dot"></span><div><strong id="connection-title">Connecting…</strong><p id="connection-detail">Checking your local helper.</p></div><button id="reconnect" class="icon-button" title="Reconnect to Discord" aria-label="Reconnect to Discord">↻</button></section>
+    <section class="preview" aria-label="Presence preview">
+      <div class="eyebrow">YOUR PRESENCE <span id="preview-label">PREVIEW</span></div>
+      <div class="activity"><div class="cover" id="cover"><img id="artwork" alt="" hidden><span id="cover-placeholder">▶</span></div><div class="activity-text"><div class="app-name">Watching Prime Video</div><strong id="preview-title">Ready when you are</strong><p id="preview-state">Open a movie or episode to get started.</p><p class="time" id="preview-timer"></p></div></div>
+      <div class="progress" id="progress" hidden><div id="progress-fill"></div></div>
+    </section>
+    <label class="master"><span><strong>Share on Discord</strong><small>Your activity, on your terms.</small></span><input id="enabled" type="checkbox" role="switch"><span class="switch"></span></label>
+    <div class="section-heading">CHOOSE WHAT TO SHARE</div>
+    <div class="preferences">
+      <label><span>Title</span><input id="showTitle" type="checkbox" role="switch"><span class="switch"></span></label>
+      <label><span>Season & episode</span><input id="showEpisode" type="checkbox" role="switch"><span class="switch"></span></label>
+      <label><span>Cover artwork</span><input id="showArtwork" type="checkbox" role="switch"><span class="switch"></span></label>
+      <label><span>Playback timer</span><input id="showTimer" type="checkbox" role="switch"><span class="switch"></span></label>
+      <label><span>Show while paused <small>Off hides the presence when paused.</small></span><input id="showPaused" type="checkbox" role="switch"><span class="switch"></span></label>
+    </div>
+    <details id="setup"><summary>Connection & setup <span>⌄</span></summary><div class="setup-body">
+      <form id="id-form"><label for="clientId">Discord Application ID</label><div class="input-row"><input id="clientId" type="text" inputmode="numeric" pattern="[0-9]{17,20}" maxlength="20" required autocomplete="off"><button class="primary" type="submit">Save</button></div></form>
+      <p>Create an application named <b>Prime Video</b> in the <a href="https://discord.com/developers/applications" target="_blank" rel="noreferrer">Discord Developer Portal</a>, then paste its Application ID above.</p>
+      <p>Load the extension, then run <code>Install.cmd</code> from the project folder. The installer already knows this extension’s ID:</p><div class="extension-id" id="extension-id"></div>
+      <p>After installation, choose ↻ above. Keep Discord’s desktop app open and enable activity sharing in Discord.</p>
+      <p class="note">Artwork and episode details depend on what the player exposes. If details are missing, move the pointer over the player to reveal its controls.</p>
+    </div></details>
+    <p id="feedback" role="status" aria-live="polite"></p>
+  </main>
+  <footer><span class="local-dot"></span> Local helper · no account tokens · no tracking</footer>
+</body>
+</html>
